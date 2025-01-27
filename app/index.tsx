@@ -1,40 +1,56 @@
-import { useMemo, useState } from 'react';
-import { Button, Text, View } from "react-native";
+import { useMemo, useRef } from 'react';
+import {  Text, View, Animated, PanResponder } from "react-native";
 import { Svg, Rect } from 'react-native-svg';
 import { GestureDetector, Gesture, GestureHandlerRootView } from 'react-native-gesture-handler';
-import Animated, {runOnJS} from 'react-native-reanimated'
+import RNRAnimated, { useSharedValue, useAnimatedProps} from 'react-native-reanimated'
 
-/** Workaround for https://github.com/software-mansion/react-native-svg/issues/1484 only. */
-class RectWorkaround extends Rect {
-  public override render() {
-    const newProps = {
-      ...this.props,
-      collapsable: undefined
-    };
-    return <Rect {...newProps} />;
-  }
-}
-
-const AnimatedSvg = Animated.createAnimatedComponent(Svg);
-const AnimatedRect = Animated.createAnimatedComponent(RectWorkaround);
-const AnimatedView = Animated.createAnimatedComponent(View);
+const RNRAnimatedRect = RNRAnimated.createAnimatedComponent(Rect)
+const AnimatedRect = Animated.createAnimatedComponent(Rect)
 
 export default function Index() {
-  const [viewClicked, setViewClicked] = useState(false)
-  const viewTapGesture = useMemo(() => {
-    return Gesture.Tap().onEnd((_e, success) => {
-      if (success) runOnJS(setViewClicked)(true);
-    })
+  const pan = useRef(new Animated.Value(0)).current;
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderMove: Animated.event([null, {dx: pan}]),
+      onPanResponderRelease: () => {
+        pan.extractOffset();
+      },
+    }),
+  ).current;
+
+  const RNTest = <View style={{borderWidth: 1}}>
+    <Text>With RN... though this isn't ideal because it lets you drag the yellow region</Text>
+
+    <Animated.View {...panResponder.panHandlers}>
+      <Svg width={200} height={100} >
+        <Rect width={200} height={100} fill='yellow'/>
+        <AnimatedRect width={100} height={100} x={pan} y={0} fill='red'/>
+      </Svg>
+    </Animated.View>
+  </View>
+
+  const x = useSharedValue(0)
+  const animatedX = useAnimatedProps(() => ({x: x.value}), [x]);
+  const xStart = useSharedValue(0);
+  const svgPanGesture = useMemo(() => {
+    return Gesture.Pan()
+      .onBegin(() => {xStart.value = x.value})
+      .onChange((e) => {
+        x.value = xStart.value + e.translationX
+      })
   }, [])
 
-  const [svgClicked, setSvgClicked] = useState(false)
-  const svgTapGesture = useMemo(() => {
-    return Gesture.Tap().onEnd((_e, success) => {
-      if (success) runOnJS(setSvgClicked)(true);
-    })
-  }, [])
+  const RNGHTest = <View style={{borderWidth: 1}}>
+    <Text>With RNGH and RNR</Text>
 
-  const [isAnimatedSvg, setAnimatedSvg] = useState(false)
+    <Svg width={200} height={100}>
+    <Rect width={200} height={100} fill='yellow'/>
+      <GestureDetector gesture={svgPanGesture}>
+        <RNRAnimatedRect width={100} height={100} animatedProps={animatedX} y={0} fill='red' />
+      </GestureDetector>        
+    </Svg>
+  </View>
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -42,32 +58,10 @@ export default function Index() {
       style={{
         flex: 1,
         justifyContent: "center",
-        alignItems: "center",
       }}
     >
-      <Text>View Clicked? {viewClicked ? 'yes' : 'no'}</Text>
-      <GestureDetector gesture={viewTapGesture}>
-        <Animated.View style={{width: 100, height: 100, backgroundColor: 'black'}}/>
-      </GestureDetector>
-
-      <Text>Svg Clicked? {svgClicked ? 'yes' : 'no'}</Text>
-      {isAnimatedSvg ? 
-        <GestureDetector gesture={svgTapGesture}>
-          <Svg width={200} height={100}>
-            <Rect width={100} height={100} x={50} y={0} fill='black' />
-          </Svg>
-        </GestureDetector>
-      : <GestureDetector gesture={svgTapGesture}>
-          <AnimatedSvg width={200} height={100}>
-            <Rect width={100} height={100} x={50} y={0} fill='black' />
-          </AnimatedSvg>
-        </GestureDetector>
-      }
-
-      <Button 
-        title={`toggle animated SVG (causes a crash): ${isAnimatedSvg ? 'yes' : 'no'}`} 
-        onPress={() => setAnimatedSvg(old => !old)}
-        />
+      {RNTest}
+      {RNGHTest}
     </View>
     </GestureHandlerRootView>
   );
